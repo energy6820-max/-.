@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>인테리어 필름 모바일 재단기 (1220mm)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { -webkit-tap-highlight-color: transparent; }
+    canvas { touch-action: pan-y; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 pb-12">
+
+  <!-- 헤더 -->
+  <header class="bg-indigo-600 text-white p-4 sticky top-0 z-50 shadow-md">
+    <h1 class="text-lg font-bold text-center">✂️ 인테리어 필름 재단기 (1220mm)</h1>
+  </header>
+
+  <main class="max-w-md mx-auto p-4 space-y-4">
+
+    <!-- 1. 부재 입력 폼 -->
+    <section class="bg-white p-4 rounded-xl shadow-sm space-y-3">
+      <h2 class="font-bold text-slate-700 text-sm border-b pb-2">📌 부재 치수 입력</h2>
+      
+      <div>
+        <label class="text-xs text-slate-500 font-semibold">부재 이름</label>
+        <input type="text" id="itemName" placeholder="예: 문짝 상부" value="도어 판넬" class="w-full mt-1 p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-xs text-slate-500 font-semibold">가로 W (mm)</label>
+          <input type="number" id="itemW" placeholder="550" value="550" class="w-full mt-1 p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+        </div>
+        <div>
+          <label class="text-xs text-slate-500 font-semibold">세로 L (mm)</label>
+          <input type="number" id="itemL" placeholder="2100" value="2100" class="w-full mt-1 p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 items-center">
+        <div>
+          <label class="text-xs text-slate-500 font-semibold">수량 (개)</label>
+          <input type="number" id="itemQty" placeholder="1" value="2" class="w-full mt-1 p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+        </div>
+        
+        <!-- 결 유무 토글 -->
+        <div class="pt-4">
+          <label class="inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="itemGrain" checked class="sr-only peer">
+            <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+            <span class="ms-2 text-xs font-bold text-slate-700" id="grainText">결 있음 (회전 불가)</span>
+          </label>
+        </div>
+      </div>
+
+      <button onclick="addItem()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-lg text-sm active:bg-slate-900 transition">+ 목록에 추가</button>
+    </section>
+
+    <!-- 2. 추가된 부재 리스트 -->
+    <section class="bg-white p-4 rounded-xl shadow-sm space-y-2">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h2 class="font-bold text-slate-700 text-sm">📋 재단 목록</h2>
+        <button onclick="clearItems()" class="text-xs text-red-500 underline">전체 삭제</button>
+      </div>
+      <div id="itemList" class="space-y-2 max-h-48 overflow-y-auto pr-1 text-sm">
+        <!-- 목록이 여기에 동적으로 들어옵니다 -->
+      </div>
+      <button onclick="calculateLayout()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl text-base shadow-lg shadow-indigo-200 active:scale-95 transition">⚡ 2D 재단 최적화 계산</button>
+    </section>
+
+    <!-- 3. 결과 요약 -->
+    <section id="resultSummary" class="hidden bg-indigo-900 text-white p-4 rounded-xl shadow-md space-y-1">
+      <h3 class="text-xs text-indigo-300 font-semibold">최적화 결과 요약</h3>
+      <div class="grid grid-cols-2 gap-4 pt-1">
+        <div>
+          <span class="text-xs text-indigo-200">총 필요 필름 길이</span>
+          <p class="text-xl font-extrabold text-amber-300" id="resLength">0 m</p>
+        </div>
+        <div>
+          <span class="text-xs text-indigo-200">손실률 (로스율)</span>
+          <p class="text-xl font-extrabold text-emerald-300" id="resWaste">0 %</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. 2D 재단 도면 Canvas -->
+    <section class="bg-white p-3 rounded-xl shadow-sm space-y-2">
+      <h2 class="font-bold text-slate-700 text-sm">📐 2D 배치 도면 (폭 1220mm 고정)</h2>
+      <div class="w-full overflow-x-auto bg-slate-50 border rounded-lg p-2 flex justify-center">
+        <canvas id="cutCanvas" class="bg-white border shadow-inner max-w-full"></canvas>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    const ROLL_WIDTH = 1220; // 롤 폭 mm
+    const MARGIN = 5;        // 칼선 여유 간격 mm
+    let items = [];
+
+    // 토글 텍스트 변경
+    document.getElementById('itemGrain').addEventListener('change', (e) => {
+      document.getElementById('grainText').innerText = e.target.checked ? "결 있음 (회전 불가)" : "결 없음 (90° 회전 가능)";
+    });
+
+    // 부재 추가
+    function addItem() {
+      const name = document.getElementById('itemName').value.trim() || "부재";
+      const w = parseInt(document.getElementById('itemW').value);
+      const l = parseInt(document.getElementById('itemL').value);
+      const qty = parseInt(document.getElementById('itemQty').value);
+      const hasGrain = document.getElementById('itemGrain').checked;
+
+      if (!w || !l || !qty || w <= 0 || l <= 0 || qty <= 0) {
+        alert("가로, 세로, 수량을 바르게 입력하세요.");
+        return;
+      }
+
+      if (hasGrain && w > ROLL_WIDTH) {
+        alert(`결 있음 선택 시 폭(${w}mm)은 롤 폭(1220mm)을 넘을 수 없습니다.`);
+        return;
+      }
+
+      if (!hasGrain && w > ROLL_WIDTH && l > ROLL_WIDTH) {
+        alert(`가로와 세로 모두 1220mm를 초과하여 재단할 수 없습니다.`);
+        return;
+      }
+
+      items.push({ id: Date.now(), name, w, l, qty, hasGrain });
+      renderItemList();
+    }
+
+    // 항목 삭제
+    function deleteItem(id) {
+      items = items.filter(item => item.id !== id);
+      renderItemList();
+    }
+
+    function clearItems() {
+      items = [];
+      renderItemList();
+    }
+
+    function renderItemList() {
+      const listEl = document.getElementById('itemList');
+      if (items.length === 0) {
+        listEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">추가된 부재가 없습니다.</p>';
+        return;
+      }
+      listEl.innerHTML = items.map(item => `
+        <div class="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border text-xs">
+          <div>
+            <span class="font-bold text-slate-800">${item.name}</span>
+            <span class="text-slate-500">(${item.w}×${item.l}mm) × ${item.qty}개</span>
+            <span class="ml-1 px-1.5 py-0.5 rounded ${item.hasGrain ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'} font-semibold">
+              ${item.hasGrain ? '결있음' : '결없음'}
+            </span>
+          </div>
+          <button onclick="deleteItem(${item.id})" class="text-red-500 font-bold px-2">✕</button>
+        </div>
+      `).join('');
+    }
+
+    // MaxRects 알고리즘 적용 재단 계산
+    function calculateLayout() {
+      if (items.length === 0) {
+        alert("재단할 부재를 먼저 추가해주세요.");
+        return;
+      }
+
+      // 1. 부재 목록 펼치기
+      let flatList = [];
+      items.forEach(item => {
+        for (let i = 0; i < item.qty; i++) {
+          flatList.push({
+            name: item.name,
+            w: item.w + MARGIN,
+            l: item.l + MARGIN,
+            origW: item.w,
+            origL: item.l,
+            hasGrain: item.hasGrain
+          });
+        }
+      });
+
+      // 면적 큰 순서대로 정렬
+      flatList.sort((a, b) => (b.w * b.l) - (a.w * a.l));
+
+      // MaxRects 알고리즘 배치
+      let freeRects = [{ x: 0, y: 0, w: ROLL_WIDTH, h: 100000 }];
+      let placedItems = [];
+
+      for (let item of flatList) {
+        let bestFit = null;
+        let bestScore = Infinity;
+
+        for (let rect of freeRects) {
+          // 정방향 검사
+          if (rect.w >= item.w && rect.h >= item.l) {
+            let score = Math.min(rect.w - item.w, rect.h - item.l);
+            if (score < bestScore) {
+              bestScore = score;
+              bestFit = { x: rect.x, y: rect.y, w: item.w, h: item.l, isRotated: false };
+            }
+          }
+          // 회전 검사 (결 없을 때만)
+          if (!item.hasGrain) {
+            if (rect.w >= item.l && rect.h >= item.w) {
+              let score = Math.min(rect.w - item.l, rect.h - item.w);
+              if (score < bestScore) {
+                bestScore = score;
+                bestFit = { x: rect.x, y: rect.y, w: item.l, h: item.w, isRotated: true };
+              }
+            }
+          }
+        }
+
+        if (bestFit) {
+          placedItems.push({
+            ...item,
+            x: bestFit.x,
+            y: bestFit.y,
+            placedW: bestFit.w,
+            placedL: bestFit.h,
+            isRotated: bestFit.isRotated
+          });
+
+          // 빈 공간 분할
+          let newFree = [];
+          for (let rect of freeRects) {
+            if (intersects(rect, bestFit)) {
+              if (bestFit.y > rect.y) newFree.push({ x: rect.x, y: rect.y, w: rect.w, h: bestFit.y - rect.y });
+              if (bestFit.y + bestFit.h < rect.y + rect.h) newFree.push({ x: rect.x, y: bestFit.y + bestFit.h, w: rect.w, h: rect.y + rect.h - (bestFit.y + bestFit.h) });
+              if (bestFit.x > rect.x) newFree.push({ x: rect.x, y: rect.y, w: bestFit.x - rect.x, h: rect.h });
+              if (bestFit.x + bestFit.w < rect.x + rect.w) newFree.push({ x: bestFit.x + bestFit.w, y: rect.y, w: rect.x + rect.w - (bestFit.x + bestFit.w), h: rect.h });
+            } else {
+              newFree.push(rect);
+            }
+          }
+          freeRects = filterContained(newFree);
+        } else {
+          alert(`[배치 오류] ${item.name} (${item.origW}×${item.origL}mm) 배치가 불가능합니다.`);
+          return;
+        }
+      }
+
+      // 결과 계산
+      const maxY = Math.max(...placedItems.map(i => i.y + i.placedL), 0);
+      const totalUsedM = (maxY / 1000).toFixed(2);
+      const totalRollArea = ROLL_WIDTH * maxY;
+      const netArea = placedItems.reduce((acc, cur) => acc + (cur.origW * cur.origL), 0);
+      const wastePercent = totalRollArea > 0 ? (((totalRollArea - netArea) / totalRollArea) * 100).toFixed(1) : 0;
+
+      // 결과 화면 표시
+      document.getElementById('resultSummary').classList.remove('hidden');
+      document.getElementById('resLength').innerText = `${totalUsedM} m`;
+      document.getElementById('resWaste').innerText = `${wastePercent} %`;
+
+      // Canvas 도면 그리기
+      drawCanvas(placedItems, maxY);
+    }
+
+    function intersects(a, b) {
+      return !(b.x >= a.x + a.w || b.x + b.w <= a.x || b.y >= a.y + a.h || b.y + b.h <= a.y);
+    }
+
+    function filterContained(rects) {
+      return rects.filter((r1, i) => !rects.some((r2, j) => i !== j && r1.x >= r2.x && r1.y >= r2.y && r1.x + r1.w <= r2.x + r2.w && r1.y + r1.h <= r2.y + r2.h));
+    }
+
+    // 2D Canvas 렌더링
+    function drawCanvas(placedItems, totalLengthY) {
+      const canvas = document.getElementById('cutCanvas');
+      const ctx = canvas.getContext('2d');
+
+      const containerWidth = Math.min(window.innerWidth - 40, 360);
+      const scale = containerWidth / ROLL_WIDTH;
+
+      canvas.width = containerWidth;
+      canvas.height = Math.max(totalLengthY * scale, 300);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 롤 바탕 렌더링
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 부재 렌더링
+      placedItems.forEach(item => {
+        const x = item.x * scale;
+        const y = item.y * scale;
+        const w = (item.placedW - MARGIN) * scale;
+        const h = (item.placedL - MARGIN) * scale;
+
+        // 색상 지정 (결 있음: 인디고, 결 없음: 에메랄드)
+        ctx.fillStyle = item.hasGrain ? '#e0e7ff' : '#d1fae5';
+        ctx.strokeStyle = item.hasGrain ? '#4338ca' : '#047857';
+        ctx.lineWidth = 1.5;
+
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeRect(x, y, w, h);
+
+        // 텍스트 및 라벨
+        ctx.fillStyle = '#1e293b';
+        ctx.font = 'bold 10px sans-serif';
+        if (w > 30 && h > 20) {
+          ctx.fillText(item.name, x + 4, y + 12);
+          ctx.font = '8px sans-serif';
+          ctx.fillText(`${item.origW}×${item.origL}`, x + 4, y + 22);
+
+          // 무늬 방향 표시
+          if (item.hasGrain) {
+            ctx.fillStyle = '#4338ca';
+            ctx.fillText('↕ 결', x + w - 22, y + 12);
+          } else if (item.isRotated) {
+            ctx.fillStyle = '#047857';
+            ctx.fillText('↻ 90°', x + w - 26, y + 12);
+          }
+        }
+      });
+    }
+
+    // 초기 화면 생성
+    renderItemList();
+  </script>
+</body>
+</html>
